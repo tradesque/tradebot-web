@@ -182,9 +182,22 @@
                 <div class="price-type-info" id="priceTypeInfo">掛單及觸價市價單需填寫</div>
             </div>
 
-            <div class="form-group">
-                <label for="stopLossPrice">停損價格</label>
-                <input type="number" id="stopLossPrice" placeholder="停損價格" step="0.00001" min="0" required onchange="updateValidationInfo()">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="stopLossType">停損設定方式</label>
+                    <select id="stopLossType" onchange="toggleStopLossInput()">
+                        <option value="price">停損價格</option>
+                        <option value="percent">停損百分比</option>
+                    </select>
+                </div>
+                <div class="form-group" id="stopLossPriceGroup">
+                    <label for="stopLossPrice">停損價格</label>
+                    <input type="number" id="stopLossPrice" placeholder="停損價格" step="0.00001" min="0" required onchange="updateValidationInfo()">
+                </div>
+                <div class="form-group" id="stopLossPercentGroup" style="display: none;">
+                    <label for="stopLossPercent">停損百分比 (%)</label>
+                    <input type="number" id="stopLossPercent" placeholder="如：2.5" step="0.01" min="0.01" onchange="updateValidationInfo()">
+                </div>
             </div>
 
             <div class="form-row">
@@ -321,6 +334,20 @@
             saveFormState();
         }
 
+        function toggleStopLossInput() {
+            const usePercent = document.getElementById('stopLossType').value === 'percent';
+            const priceGroup = document.getElementById('stopLossPriceGroup');
+            const percentGroup = document.getElementById('stopLossPercentGroup');
+            const priceInput = document.getElementById('stopLossPrice');
+            const percentInput = document.getElementById('stopLossPercent');
+
+            priceGroup.style.display = usePercent ? 'none' : 'block';
+            percentGroup.style.display = usePercent ? 'block' : 'none';
+            priceInput.required = !usePercent;
+            percentInput.required = usePercent;
+            updateValidationInfo();
+        }
+
         function toggleStopLossMode() {
             const mode = document.getElementById('stopLossMode').value;
             const breakevenInputs = document.getElementById('breakevenInputs');
@@ -373,14 +400,28 @@
             const direction = document.getElementById('direction').value;
             const priceType = document.getElementById('priceType').value;
             const orderPrice = parseFloat(document.getElementById('orderPrice').value);
-            const stopLossPrice = parseFloat(document.getElementById('stopLossPrice').value);
+            const stopLossType = document.getElementById('stopLossType').value;
+            const stopLossValue = stopLossType === 'percent'
+                ? parseFloat(document.getElementById('stopLossPercent').value)
+                : parseFloat(document.getElementById('stopLossPrice').value);
             const validationInfo = document.getElementById('validationInfo');
             const usesOrderPrice = priceType === 'limit' || priceType === 'trigger_market';
 
-            if (!direction || !stopLossPrice || (usesOrderPrice && !orderPrice)) {
+            if (!direction || !stopLossValue || (usesOrderPrice && !orderPrice)) {
                 validationInfo.style.display = 'none';
                 return;
             }
+
+            if (stopLossType === 'percent' && (stopLossValue <= 0 || (direction === 'long' && stopLossValue >= 100))) {
+                validationInfo.textContent = direction === 'long' ? '❌ 作多停損百分比須介於 0 與 100 之間' : '❌ 停損百分比必須大於 0';
+                validationInfo.style.display = 'block';
+                validationInfo.style.color = 'var(--tg-theme-destructive-text-color, #ff3b30)';
+                return false;
+            }
+
+            const stopLossPrice = stopLossType === 'percent' && usesOrderPrice
+                ? orderPrice * (direction === 'long' ? 1 - stopLossValue / 100 : 1 + stopLossValue / 100)
+                : stopLossValue;
 
             let infoText = '';
             let isValid = true;
@@ -395,7 +436,9 @@
                         isValid = false;
                     }
                 } else {
-                    infoText += ' 市價單將以當前市場價格執行';
+                    infoText += stopLossType === 'percent'
+                        ? ` 以市價下單前即時價下方 ${stopLossValue}% 設定停損`
+                        : ' 市價單將以當前市場價格執行';
                 }
             } else if (direction === 'short') {
                 infoText = '作空規則：';
@@ -407,7 +450,9 @@
                         isValid = false;
                     }
                 } else {
-                    infoText += ' 市價單將以當前市場價格執行';
+                    infoText += stopLossType === 'percent'
+                        ? ` 以市價下單前即時價上方 ${stopLossValue}% 設定停損`
+                        : ' 市價單將以當前市場價格執行';
                 }
             }
 
@@ -425,14 +470,17 @@
             const R = parseFloat(document.getElementById('R').value);
             const priceType = document.getElementById('priceType').value;
             const orderPrice = document.getElementById('orderPrice').value;
+            const stopLossType = document.getElementById('stopLossType').value;
             const stopLossPrice = parseFloat(document.getElementById('stopLossPrice').value);
+            const stopLossPercent = parseFloat(document.getElementById('stopLossPercent').value);
+            const stopLossValue = stopLossType === 'percent' ? stopLossPercent : stopLossPrice;
             const adjustATR = parseFloat(document.getElementById('adjustATR').value);
             const leverage = parseInt(document.getElementById('leverage').value);
             const stopLossMode = document.getElementById('stopLossMode').value;
             const usesOrderPrice = priceType === 'limit' || priceType === 'trigger_market';
 
             // 基本欄位檢查
-            if (!symbol || !period || !direction || !R || !priceType || !stopLossPrice || !adjustATR || !leverage) {
+            if (!symbol || !period || !direction || !R || !priceType || !stopLossValue || !adjustATR || !leverage) {
                 alert('請填寫所有必填欄位');
                 return false;
             }
@@ -446,18 +494,22 @@
             // 價格邏輯驗證
             if (usesOrderPrice) {
                 const orderPriceNum = parseFloat(orderPrice);
-                if (direction === 'long' && orderPriceNum <= stopLossPrice) {
+                const calculatedStopLossPrice = stopLossType === 'percent'
+                    ? orderPriceNum * (direction === 'long' ? 1 - stopLossPercent / 100 : 1 + stopLossPercent / 100)
+                    : stopLossPrice;
+                if (direction === 'long' && orderPriceNum <= calculatedStopLossPrice) {
                     alert('作多時，進場價格必須大於停損價格');
                     return false;
                 }
-                if (direction === 'short' && orderPriceNum >= stopLossPrice) {
+                if (direction === 'short' && orderPriceNum >= calculatedStopLossPrice) {
                     alert('作空時，進場價格必須小於停損價格');
                     return false;
                 }
             }
 
             // 數值範圍檢查
-            if (R <= 0 || stopLossPrice <= 0 || adjustATR <= 0 || leverage < 1 || leverage > 125) {
+            if (R <= 0 || stopLossValue <= 0 || adjustATR <= 0 || leverage < 1 || leverage > 125 ||
+                (stopLossType === 'percent' && direction === 'long' && stopLossPercent >= 100)) {
                 alert('請確認數值範圍正確');
                 return false;
             }
@@ -540,7 +592,9 @@
                 R: document.getElementById('R').value,
                 priceType: document.getElementById('priceType').value,
                 orderPrice: document.getElementById('orderPrice').value || '',
+                stopLossType: document.getElementById('stopLossType').value,
                 stopLossPrice: document.getElementById('stopLossPrice').value,
+                stopLossPercent: document.getElementById('stopLossPercent').value,
                 adjustATR: document.getElementById('adjustATR').value,
                 leverage: document.getElementById('leverage').value,
                 enableScaling: document.getElementById('enableScaling').checked
@@ -604,7 +658,9 @@
                 orderPrice: document.getElementById('orderPrice').value,
                 openPrice: document.getElementById('openPrice').value,
                 closePrice: document.getElementById('closePrice').value,
+                stopLossType: document.getElementById('stopLossType').value,
                 stopLossPrice: document.getElementById('stopLossPrice').value,
+                stopLossPercent: document.getElementById('stopLossPercent').value,
                 adjustATR: document.getElementById('adjustATR').value,
                 leverage: document.getElementById('leverage').value,
                 enableScaling: document.getElementById('enableScaling').checked,
@@ -632,7 +688,9 @@
                 document.getElementById('orderPrice').value = formData.orderPrice || '';
                 document.getElementById('openPrice').value = formData.openPrice || '';
                 document.getElementById('closePrice').value = formData.closePrice || '';
+                document.getElementById('stopLossType').value = formData.stopLossType || 'price';
                 document.getElementById('stopLossPrice').value = formData.stopLossPrice || '';
+                document.getElementById('stopLossPercent').value = formData.stopLossPercent || '';
                 document.getElementById('adjustATR').value = formData.adjustATR || '2.0';
                 document.getElementById('leverage').value = formData.leverage || '10';
                 document.getElementById('enableScaling').checked = formData.enableScaling || false;
@@ -647,6 +705,7 @@
 
                 // 觸發相關的更新邏輯
                 togglePriceInput();
+                toggleStopLossInput();
                 toggleStopLossMode();
                 updateValidationInfo();
             }

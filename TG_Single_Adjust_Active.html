@@ -143,6 +143,25 @@
             <div class="info-value" id="stopLossMode"></div>
         </div>
 
+        <div class="form-row">
+            <div class="form-group">
+                <label for="stopLossInputType">停損設定方式</label>
+                <select id="stopLossInputType" onchange="toggleStopLossInput()">
+                    <option value="price">停損價格</option>
+                    <option value="percent">停損百分比</option>
+                </select>
+            </div>
+            <div class="form-group" id="stopLossPriceInputGroup">
+                <label for="stopLossPriceInput">新停損價格</label>
+                <input type="number" id="stopLossPriceInput" step="0.00001" min="0.00001">
+            </div>
+            <div class="form-group" id="stopLossPercentInputGroup" style="display: none;">
+                <label for="stopLossPercentInput">新停損百分比 (%)</label>
+                <input type="number" id="stopLossPercentInput" step="0.01" min="0.01" placeholder="如：2.5">
+            </div>
+        </div>
+        <div class="price-type-info">百分比以實際平均成本為基準：作多向下、作空向上換算。</div>
+
         <!-- ATR 停損模式可修改參數 -->
         <div id="atrModeInputs" style="display: none;">
             <div class="form-group">
@@ -271,6 +290,7 @@
             document.getElementById('currentQuantity').textContent = orderData.quantity;
             document.getElementById('averageCost').textContent = orderData.averageCost;
             document.getElementById('currentStopLoss').textContent = orderData.currentStopLoss;
+            document.getElementById('stopLossPriceInput').value = orderData.currentStopLoss;
             document.getElementById('leverage').textContent = `${orderData.leverage}x`;
             document.getElementById('atrPeriod').textContent = orderData.period;
             document.getElementById('enableScaling').textContent = (orderData.enableScaling === 'true' || orderData.enableScaling === 'True') ? '已啟用' : '未啟用';
@@ -329,6 +349,13 @@
             }
 
             document.getElementById('stopLossMode').textContent = stopLossModeText;
+            toggleStopLossInput();
+        }
+
+        function toggleStopLossInput() {
+            const usePercent = document.getElementById('stopLossInputType').value === 'percent';
+            document.getElementById('stopLossPriceInputGroup').style.display = usePercent ? 'none' : 'block';
+            document.getElementById('stopLossPercentInputGroup').style.display = usePercent ? 'block' : 'none';
         }
 
         function toggleStopLossModeInputs() {
@@ -364,6 +391,18 @@
         }
 
         function validateForm() {
+            const stopLossInputType = document.getElementById('stopLossInputType').value;
+            const stopLossValue = parseFloat(document.getElementById(
+                stopLossInputType === 'percent' ? 'stopLossPercentInput' : 'stopLossPriceInput'
+            ).value);
+            if (!stopLossValue || stopLossValue <= 0) {
+                alert('請輸入有效的停損價格或停損百分比');
+                return false;
+            }
+            if (stopLossInputType === 'percent' && orderData.direction === 'long' && stopLossValue >= 100) {
+                alert('作多停損百分比須介於 0 與 100 之間');
+                return false;
+            }
             if (isATRMode) {
                 // ATR 模式驗證
                 const adjustATR = parseFloat(document.getElementById('adjustATR').value);
@@ -445,6 +484,17 @@
 
             let data = `id=${orderData.id}`;
             let confirmMessage = '';
+            const stopLossInputType = document.getElementById('stopLossInputType').value;
+            const stopLossPrice = document.getElementById('stopLossPriceInput').value;
+            const stopLossPercent = document.getElementById('stopLossPercentInput').value;
+            if (stopLossInputType === 'percent') {
+                data += `&stopLossType=percent&stopLossPercent=${stopLossPercent}`;
+            } else if (parseFloat(stopLossPrice) !== parseFloat(orderData.currentStopLoss)) {
+                data += `&stopLossType=price&stopLossPrice=${stopLossPrice}`;
+            }
+            const stopLossDescription = stopLossInputType === 'percent'
+                ? `，停損設為平均成本的 ${stopLossPercent}% 距離`
+                : (parseFloat(stopLossPrice) !== parseFloat(orderData.currentStopLoss) ? `，停損價設為 ${stopLossPrice}` : '');
 
             if (isATRMode) {
                 // ATR 模式：修改 ATR 倍數和 TP
@@ -452,7 +502,7 @@
                 const takeProfitR = document.getElementById('takeProfitR_atr').value || '0';
                 data += `&adjustATR=${adjustATR}`;
                 data += `&takeProfitR=${takeProfitR}`;
-                confirmMessage = `確認修改 ATR 倍數為 ${adjustATR}${takeProfitR > 0 ? '，TP為 ' + takeProfitR + 'R' : ''}？`;
+                confirmMessage = `確認修改 ATR 倍數為 ${adjustATR}${takeProfitR > 0 ? '，TP為 ' + takeProfitR + 'R' : ''}${stopLossDescription}？`;
             } else {
                 // 保本/移動停損模式：可修改模式和參數
                 const mode = document.getElementById('stopLossModeSelect').value;
@@ -495,7 +545,7 @@
                                  mode === 'breakeven' ? '保本停損' :
                                  mode === 'trailing' ? '移動停損' : '固定R停損';
                 const takeProfitR = mode !== 'fixed_r' ? (document.getElementById('takeProfitR_advanced').value || '0') : '0';
-                confirmMessage = `確認修改停損模式為 ${modeText}${takeProfitR > 0 ? '，TP為 ' + takeProfitR + 'R' : ''}？`;
+                confirmMessage = `確認修改停損模式為 ${modeText}${takeProfitR > 0 ? '，TP為 ' + takeProfitR + 'R' : ''}${stopLossDescription}？`;
             }
 
             if (confirm(confirmMessage)) {

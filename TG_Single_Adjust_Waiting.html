@@ -118,9 +118,22 @@
             <input type="number" id="targetPrice" step="0.01" placeholder="輸入目標價格">
         </div>
         
-        <div class="form-group">
-            <label for="stopLossPrice">停損價格</label>
-            <input type="number" id="stopLossPrice" step="0.01" placeholder="輸入停損價格">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="stopLossType">停損設定方式</label>
+                <select id="stopLossType" onchange="toggleStopLossInput()">
+                    <option value="price">停損價格</option>
+                    <option value="percent">停損百分比</option>
+                </select>
+            </div>
+            <div class="form-group" id="stopLossPriceGroup">
+                <label for="stopLossPrice">停損價格</label>
+                <input type="number" id="stopLossPrice" step="0.00001" min="0.00001" placeholder="輸入停損價格">
+            </div>
+            <div class="form-group" id="stopLossPercentGroup" style="display: none;">
+                <label for="stopLossPercent">停損百分比 (%)</label>
+                <input type="number" id="stopLossPercent" step="0.01" min="0.01" placeholder="如：2.5">
+            </div>
         </div>
         
         <div class="form-group">
@@ -250,6 +263,8 @@
                 direction: urlParams.get('direction') || '',
                 targetPrice: urlParams.get('targetPrice') || '',
                 stopLossPrice: urlParams.get('stopLossPrice') || '',
+                stopLossType: urlParams.get('stopLossType') || 'price',
+                stopLossPercent: urlParams.get('stopLossPercent') || '',
                 adjustATR: urlParams.get('adjustATR') || '',
                 leverage: urlParams.get('leverage') || '',
                 period: urlParams.get('period') || '',
@@ -274,7 +289,9 @@
             
             // 設定當前參數值
             document.getElementById('targetPrice').value = orderData.targetPrice;
+            document.getElementById('stopLossType').value = orderData.stopLossType;
             document.getElementById('stopLossPrice').value = orderData.stopLossPrice;
+            document.getElementById('stopLossPercent').value = orderData.stopLossPercent;
             document.getElementById('adjustATR').value = orderData.adjustATR;
             document.getElementById('leverage').value = orderData.leverage;
             document.getElementById('period').value = orderData.period;
@@ -305,7 +322,14 @@
             document.getElementById('fixedStopLossR').value = orderData.fixedStopLossR;
             document.getElementById('takeProfitR').value = orderData.takeProfitR;
 
+            toggleStopLossInput();
             toggleStopLossMode();
+        }
+
+        function toggleStopLossInput() {
+            const usePercent = document.getElementById('stopLossType').value === 'percent';
+            document.getElementById('stopLossPriceGroup').style.display = usePercent ? 'none' : 'block';
+            document.getElementById('stopLossPercentGroup').style.display = usePercent ? 'block' : 'none';
         }
 
         function toggleStopLossMode() {
@@ -354,7 +378,10 @@
         
         function submitModification() {
             const targetPrice = document.getElementById('targetPrice').value;
+            const stopLossType = document.getElementById('stopLossType').value;
             const stopLossPrice = document.getElementById('stopLossPrice').value;
+            const stopLossPercent = document.getElementById('stopLossPercent').value;
+            const stopLossValue = stopLossType === 'percent' ? stopLossPercent : stopLossPrice;
             const adjustATR = document.getElementById('adjustATR').value;
             const leverage = document.getElementById('leverage').value;
             const period = document.getElementById('period').value;
@@ -362,8 +389,8 @@
             const stopLossMode = document.getElementById('stopLossMode').value;
 
             // 基本驗證
-            if (!targetPrice || !stopLossPrice || !adjustATR) {
-                alert('請填入必要參數：目標價格、停損價格、ATR倍數');
+            if (!targetPrice || !stopLossValue || !adjustATR) {
+                alert('請填入必要參數：目標價格、停損設定、ATR倍數');
                 return;
             }
 
@@ -374,7 +401,14 @@
 
             // 價格邏輯驗證
             const target = parseFloat(targetPrice);
-            const stopLoss = parseFloat(stopLossPrice);
+            const percent = parseFloat(stopLossPercent);
+            if (stopLossType === 'percent' && (percent <= 0 || (orderData.direction === 'long' && percent >= 100))) {
+                alert(orderData.direction === 'long' ? '作多停損百分比須介於 0 與 100 之間' : '停損百分比必須大於 0');
+                return;
+            }
+            const stopLoss = stopLossType === 'percent'
+                ? target * (orderData.direction === 'long' ? 1 - percent / 100 : 1 + percent / 100)
+                : parseFloat(stopLossPrice);
 
             if (orderData.direction === 'long' && stopLoss >= target) {
                 alert('作多時停損價格必須低於目標價格');
@@ -465,10 +499,16 @@
             else if (stopLossMode === 'preserve_trailing') stopLossModeText = '保本+移動停損';
             else if (stopLossMode === 'fixed_r') stopLossModeText = '固定R停損';
 
-            const confirmMessage = `確認修改掛單參數？\n目標價格: ${targetPrice}\n停損價格: ${stopLossPrice}\nATR倍數: ${adjustATR}\n槓桿: ${leverage}x\n週期: ${period}\n加碼: ${enableScaling === 'true' ? '啟用' : '停用'}\n停損模式: ${stopLossModeText}${takeProfitR > 0 ? '\nTP: ' + takeProfitR + 'R' : ''}`;
+            const stopLossText = stopLossType === 'percent'
+                ? `${stopLossPercent}%（換算價格約 ${Number(stopLoss.toFixed(8))}）`
+                : stopLossPrice;
+            const confirmMessage = `確認修改掛單參數？\n目標價格: ${targetPrice}\n停損: ${stopLossText}\nATR倍數: ${adjustATR}\n槓桿: ${leverage}x\n週期: ${period}\n加碼: ${enableScaling === 'true' ? '啟用' : '停用'}\n停損模式: ${stopLossModeText}${takeProfitR > 0 ? '\nTP: ' + takeProfitR + 'R' : ''}`;
 
             if (confirm(confirmMessage)) {
-                const data = `id=${orderData.id}&targetPrice=${targetPrice}&stopLossPrice=${stopLossPrice}&adjustATR=${adjustATR}&leverage=${leverage}&period=${period}&enableScaling=${enableScaling}&enableBreakeven=${enableBreakeven}&breakevenActivationR=${breakevenActivationR}&breakevenR=${breakevenR}&enableTrailing=${enableTrailing}&trailingActivationR=${trailingActivationR}&trailingCallbackR=${trailingCallbackR}&enableFixedR=${enableFixedR}&fixedR=${fixedR}&fixedStopLossR=${fixedStopLossR}&takeProfitR=${takeProfitR}`;
+                const stopLossParam = stopLossType === 'percent'
+                    ? `stopLossPercent=${stopLossPercent}`
+                    : `stopLossPrice=${stopLossPrice}`;
+                const data = `id=${orderData.id}&targetPrice=${targetPrice}&stopLossType=${stopLossType}&${stopLossParam}&adjustATR=${adjustATR}&leverage=${leverage}&period=${period}&enableScaling=${enableScaling}&enableBreakeven=${enableBreakeven}&breakevenActivationR=${breakevenActivationR}&breakevenR=${breakevenR}&enableTrailing=${enableTrailing}&trailingActivationR=${trailingActivationR}&trailingCallbackR=${trailingCallbackR}&enableFixedR=${enableFixedR}&fixedR=${fixedR}&fixedStopLossR=${fixedStopLossR}&takeProfitR=${takeProfitR}`;
                 tg.sendData(data);
             }
         }
