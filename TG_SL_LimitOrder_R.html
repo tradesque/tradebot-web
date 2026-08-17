@@ -58,6 +58,20 @@
             </div>
             <div class="form-row">
                 <div class="form-group col-md-6">
+                    <label for="entryMode">進場模式</label>
+                    <select class="form-control" id="entryMode">
+                        <option value="book_slices" selected>LOB</option>
+                        <option value="trigger_market">觸價市價進場</option>
+                    </select>
+                </div>
+                <div class="form-group col-md-6">
+                    <small class="form-text text-muted">
+                        LOB：第一檔深度分批成交；觸價市價進場：觸價後兩腳市價同送
+                    </small>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group col-md-6">
                     <label for="RPercent">掛單價格</label>
                     <input type="text" class="form-control" id="limitOrderPrice" placeholder="輸入掛單價格">
                     <br/>
@@ -217,7 +231,7 @@
             let longValue = localStorage.getItem('SL_long');
             let shortValue = localStorage.getItem('SL_short');
             let limitOrderPrice = 0;
-            if (urlParams.size > 0) {
+            if (urlParams.has('long') && urlParams.has('short')) {
                 longParams = decodeURIComponent(urlParams.get('long')).split('/');
                 shortParams = decodeURIComponent(urlParams.get('short')).split('/');
                 longValue = longParams[0];
@@ -246,6 +260,7 @@
             const preserveTypeValue = localStorage.getItem('SL_preserveType');
             const trailingConditionValue = localStorage.getItem('SL_trailingCondition');
             const trailingAmountValue = localStorage.getItem('SL_trailingAmount');
+            const entryModeValue = localStorage.getItem('SL_pairEntryMode');
 
             if (longListValue) {
                 document.getElementById('long_list').value = longListValue;
@@ -300,6 +315,7 @@
             document.getElementById('TP').value = TPValue;
             document.getElementById('RPercent').value = RPercentValue;
             document.getElementById('Leverage').value = LeverageValue;
+            document.getElementById('entryMode').value = entryModeValue || 'book_slices';
             if(preservePercentValue === null) {
                 document.getElementById('preservePercent').value = '0';
             } else {
@@ -345,6 +361,8 @@
             let preservePercent = document.getElementById('preservePercent').value;
             let savePercent = document.getElementById('savePercent').value;
             const preserveType = document.getElementById('preserveType').value;
+            const entryMode = document.getElementById('entryMode').value;
+            const entryModeLabel = document.getElementById('entryMode').selectedOptions[0].text;
             let trailingCondition = document.getElementById('trailingCondition').value;
             let trailingAmount = document.getElementById('trailingAmount').value;
             let limitOrderPrice = document.getElementById('limitOrderPrice').value;
@@ -461,6 +479,7 @@
             localStorage.setItem('SL_preserveType', preserveType);
             localStorage.setItem('SL_trailingCondition', trailingCondition);
             localStorage.setItem('SL_trailingAmount', trailingAmount);
+            localStorage.setItem('SL_pairEntryMode', entryMode);
             
             if (isSLMinus === 'SL_Minus') {
                 SL = -SL;
@@ -496,8 +515,8 @@
                 trailingAmount = 0;
             }
             var result = '';
-            result = 'action=order&long=' + encodeURIComponent(long) + '&short=' + encodeURIComponent(short) + '&RPercent=' + RPercent + '&SL=' + SL + '&TP=' + TP + '&R=' + R + '&Leverage=' + Leverage + '&preservePercent=' + preservePercent + '&savePercent=' + savePercent + '&trailingCondition=' + trailingCondition + '&trailingAmount=' + trailingAmount + '&limitOrderPrice=' + limitOrderPrice + '&preserveType=' + preserveType;
-            var checkResult = '請確認參數:\n作多:' + long + '\n作空:' + short + '\n掛單價格:' + limitOrderPrice +'\n1R幾%:'+ RPercent + '%\nSL:' + SL + '%('+ orig_SL + 'R)\nTP:' + TP + '%(' + orig_TP +'R)\n下單金額:' + R + ' U\n槓桿倍數:' + Leverage + '(估算保證金：' + marginValue +'U)\n';
+            result = 'action=order&entryMode=' + entryMode + '&long=' + encodeURIComponent(long) + '&short=' + encodeURIComponent(short) + '&RPercent=' + RPercent + '&SL=' + SL + '&TP=' + TP + '&R=' + R + '&Leverage=' + Leverage + '&preservePercent=' + preservePercent + '&savePercent=' + savePercent + '&trailingCondition=' + trailingCondition + '&trailingAmount=' + trailingAmount + '&limitOrderPrice=' + limitOrderPrice + '&preserveType=' + preserveType;
+            var checkResult = '請確認參數:\n進場模式:' + entryModeLabel + '\n作多:' + long + '\n作空:' + short + '\n掛單價格:' + limitOrderPrice +'\n1R幾%:'+ RPercent + '%\nSL:' + SL + '%('+ orig_SL + 'R)\nTP:' + TP + '%(' + orig_TP +'R)\n下單金額:' + R + ' U\n槓桿倍數:' + Leverage + '(估算保證金：' + marginValue +'U)\n';
             if (preserveType === 'preserve') {
                 checkResult += '自動保本條件:' + preservePercent + '%(' + orig_preservePercent + 'R)\n保本%數:' + savePercent + '%(' + orig_savePercent + 'R)';
             } else if (preserveType === 'trailing') {
@@ -528,7 +547,9 @@
         function getCurrentPrice() {
             const long = document.getElementById('long').value;
             const short = document.getElementById('short').value;
-            const result = 'action=getPrice&long=' + encodeURIComponent(long) + '&short=' + encodeURIComponent(short);
+            const entryMode = document.getElementById('entryMode').value;
+            localStorage.setItem('SL_pairEntryMode', entryMode);
+            const result = 'action=getPrice&entryMode=' + entryMode + '&long=' + encodeURIComponent(long) + '&short=' + encodeURIComponent(short);
             telegram.showConfirm("取得 " + long + "/" + short + " 價格?", function(isOK){
                 if (isOK) {
                     telegram.sendData(result);
