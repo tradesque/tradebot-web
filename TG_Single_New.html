@@ -158,6 +158,7 @@
                         <option value="">請選擇</option>
                         <option value="market">市價單</option>
                         <option value="limit">掛單</option>
+                        <option value="trigger_market">觸價市價單</option>
                     </select>
                 </div>
             </div>
@@ -165,7 +166,7 @@
             <div class="form-group" id="orderPriceGroup" style="display: none;">
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="orderPrice">掛單價格</label>
+                        <label for="orderPrice" id="orderPriceLabel">掛單價格</label>
                         <input type="number" id="orderPrice" placeholder="掛單價格" step="0.00001" min="0">
                     </div>
                     <div class="form-group">
@@ -178,7 +179,7 @@
                     </div>
                 </div>
                 <button type="button" class="secondary-btn" onclick="calculateMidPrice()">計算中價</button>
-                <div class="price-type-info">僅限掛單類型需填寫</div>
+                <div class="price-type-info" id="priceTypeInfo">掛單及觸價市價單需填寫</div>
             </div>
 
             <div class="form-group">
@@ -284,10 +285,17 @@
             const orderPriceInput = document.getElementById('orderPrice');
             const openPriceInput = document.getElementById('openPrice');
             const closePriceInput = document.getElementById('closePrice');
+            const orderPriceLabel = document.getElementById('orderPriceLabel');
+            const priceTypeInfo = document.getElementById('priceTypeInfo');
+            const usesOrderPrice = priceType === 'limit' || priceType === 'trigger_market';
 
-            if (priceType === 'limit') {
+            if (usesOrderPrice) {
                 orderPriceGroup.style.display = 'block';
                 orderPriceInput.required = true;
+                orderPriceLabel.textContent = priceType === 'trigger_market' ? '觸發價格' : '掛單價格';
+                priceTypeInfo.textContent = priceType === 'trigger_market'
+                    ? '到達觸發價格後，以 Binance 原生市價單進場'
+                    : '掛單將直接送至 Binance 限價單簿';
             } else {
                 orderPriceGroup.style.display = 'none';
                 orderPriceInput.required = false;
@@ -367,8 +375,9 @@
             const orderPrice = parseFloat(document.getElementById('orderPrice').value);
             const stopLossPrice = parseFloat(document.getElementById('stopLossPrice').value);
             const validationInfo = document.getElementById('validationInfo');
+            const usesOrderPrice = priceType === 'limit' || priceType === 'trigger_market';
 
-            if (!direction || !stopLossPrice || (priceType === 'limit' && !orderPrice)) {
+            if (!direction || !stopLossPrice || (usesOrderPrice && !orderPrice)) {
                 validationInfo.style.display = 'none';
                 return;
             }
@@ -378,11 +387,11 @@
 
             if (direction === 'long') {
                 infoText = '作多規則：';
-                if (priceType === 'limit') {
+                if (usesOrderPrice) {
                     if (orderPrice > stopLossPrice) {
-                        infoText += `✅ 掛單價(${orderPrice}) > 停損價(${stopLossPrice})`;
+                        infoText += `✅ 進場價(${orderPrice}) > 停損價(${stopLossPrice})`;
                     } else {
-                        infoText += `❌ 掛單價(${orderPrice}) 應大於停損價(${stopLossPrice})`;
+                        infoText += `❌ 進場價(${orderPrice}) 應大於停損價(${stopLossPrice})`;
                         isValid = false;
                     }
                 } else {
@@ -390,11 +399,11 @@
                 }
             } else if (direction === 'short') {
                 infoText = '作空規則：';
-                if (priceType === 'limit') {
+                if (usesOrderPrice) {
                     if (orderPrice < stopLossPrice) {
-                        infoText += `✅ 掛單價(${orderPrice}) < 停損價(${stopLossPrice})`;
+                        infoText += `✅ 進場價(${orderPrice}) < 停損價(${stopLossPrice})`;
                     } else {
-                        infoText += `❌ 掛單價(${orderPrice}) 應小於停損價(${stopLossPrice})`;
+                        infoText += `❌ 進場價(${orderPrice}) 應小於停損價(${stopLossPrice})`;
                         isValid = false;
                     }
                 } else {
@@ -420,6 +429,7 @@
             const adjustATR = parseFloat(document.getElementById('adjustATR').value);
             const leverage = parseInt(document.getElementById('leverage').value);
             const stopLossMode = document.getElementById('stopLossMode').value;
+            const usesOrderPrice = priceType === 'limit' || priceType === 'trigger_market';
 
             // 基本欄位檢查
             if (!symbol || !period || !direction || !R || !priceType || !stopLossPrice || !adjustATR || !leverage) {
@@ -428,20 +438,20 @@
             }
 
             // 掛單價格檢查
-            if (priceType === 'limit' && !orderPrice) {
-                alert('掛單類型必須填寫掛單價格');
+            if (usesOrderPrice && !orderPrice) {
+                alert('掛單或觸價市價單必須填寫進場價格');
                 return false;
             }
 
             // 價格邏輯驗證
-            if (priceType === 'limit') {
+            if (usesOrderPrice) {
                 const orderPriceNum = parseFloat(orderPrice);
                 if (direction === 'long' && orderPriceNum <= stopLossPrice) {
-                    alert('作多時，掛單價格必須大於停損價格');
+                    alert('作多時，進場價格必須大於停損價格');
                     return false;
                 }
                 if (direction === 'short' && orderPriceNum >= stopLossPrice) {
-                    alert('作空時，掛單價格必須小於停損價格');
+                    alert('作空時，進場價格必須小於停損價格');
                     return false;
                 }
             }
